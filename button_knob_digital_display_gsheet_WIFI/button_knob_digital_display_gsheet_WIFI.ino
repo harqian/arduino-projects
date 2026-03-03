@@ -1,13 +1,13 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include "app_script_credentials.h"
+#include "wifi_credentials.h"
 
 using namespace std;
 
 const int attempts = 20;
 const int ms_per_attempt = 500;
-
-#include "wifi_credentials.h"
 
 const int button_pin = 23;
 const int pot_pin = 34;
@@ -41,7 +41,7 @@ void send_to_sheet(int pin) {
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
     String url =
-      "https://script.google.com/macros/s/AKfycbwh0mD5DdjrGN1r1nbDAw7lwyJxS-ldom4Yj41_LqRGQ_OEEZIKdDw-FgdGJ16LAICcmA/exec?value1="
+      String(app_script_url_base)
       + String(pin);
 
     Serial.print("URL: ");

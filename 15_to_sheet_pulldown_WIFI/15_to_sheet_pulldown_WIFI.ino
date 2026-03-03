@@ -1,13 +1,13 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include "app_script_credentials.h"
+#include "wifi_credentials.h"
 
 using namespace std;
 
 const int attempts = 20;
 const int ms_per_attempt = 500;
-
-#include "wifi_credentials.h"
 
 const int pins[] = {15, 16, 17};
 const int pin_count = 3;
@@ -21,7 +21,7 @@ void send_to_sheet(int pin) {
 
     HTTPClient http;
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    http.begin(client, "https://script.google.com/macros/s/AKfycbwh0mD5DdjrGN1r1nbDAw7lwyJxS-ldom4Yj41_LqRGQ_OEEZIKdDw-FgdGJ16LAICcmA/exec?value1=" + String(pin));
+    http.begin(client, String(app_script_url_base) + String(pin));
     http.addHeader("Content-Type", "text/plain");
 
     int httpResponseCode = http.GET();

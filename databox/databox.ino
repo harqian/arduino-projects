@@ -4,7 +4,6 @@
 #include <WiFiClientSecure.h>
 #include <WiFi.h>
 #include <base64.h>
-#include "app_script_credentials.h"
 #include "wifi_credentials.h"
 
 // Connections to INMP441 I2S microphone
@@ -12,6 +11,28 @@
 #define I2S_SD 23
 #define I2S_SCK 16
 const int button_pin = 18;
+const int led_pins[6] = {32, 33, 25, 26, 27, 14};
+const int pot_pins[2] = {34, 35};
+
+const int configurations[16][4] = {
+  {0, 0, 0, 0}, // 0
+  {0, 0, 0, 1}, // 1
+  {0, 0, 1, 0}, // 2
+  {0, 0, 1, 1}, // 3
+  {0, 1, 0, 0}, // 4
+  {0, 1, 0, 1}, // 5
+  {0, 1, 1, 0}, // 6
+  {0, 1, 1, 1}, // 7
+  {1, 0, 0, 0}, // 8
+  {1, 0, 0, 1}  // 9
+  {1, 0, 1, 0}  // 10
+  {1, 0, 1, 1}  // 11
+  {1, 1, 0, 0}  // 12
+  {1, 1, 0, 1}  // 13
+  {1, 1, 1, 0}  // 14
+  {1, 1, 1, 1}  // 15
+};
+
 
 // Use I2S Processor 0
 #define I2S_PORT I2S_NUM_0
@@ -48,6 +69,7 @@ void i2s_setpin() {
 
   i2s_set_pin(I2S_PORT, &pin_config);
 }
+
 
 bool attempt_connect(const char* ssid, const char* password) {
   WiFi.begin(ssid, password);
@@ -121,6 +143,17 @@ void writeWavHeader(uint8_t* header, int sample_rate, int bits_per_sample, int n
   header[43] = (data_size >> 24) & 0xFF;
 }
 
+void send_display(int number) {
+  Serial.print("Updating display with number: ");
+  Serial.println(number);
+
+  for (int i = 0; i < 4; i++) {
+    digitalWrite(display_pins[i],
+      configurations[number][i] ? HIGH : LOW);
+  }
+}
+
+
 void setup() {
   Serial.begin(115200);
 
@@ -145,9 +178,40 @@ void setup() {
 
 
   pinMode(button_pin, INPUT_PULLUP);
+
+  for (int led_pin : led_pins) {
+    pinMode(led_pin, OUTPUT);
+  }
+
 }
 
+int new_scores[2] = {-1, -1};
+int scores[2] = {-1, -1};
+int pot_values[2];
+
+
 void loop() {
+  for (int i = 0; i < 2; i++) {
+    Serial.println(i);  
+    pot_values[i] = analogRead(pot_pins[i]);
+    new_scores[i] = pot_values[i] * 16 / 4095;
+
+    Serial.print("Pot raw: ");
+    Serial.print(pot_values[i]);
+    Serial.print(" -> score: ");
+    Serial.println(new_scores[i]);
+
+    if (new_scores[i] != scores[i]) {
+      Serial.print("Score changed: ");
+      Serial.print(scores[i]);
+      Serial.print(" -> ");
+      Serial.println(new_scores[i]);
+
+      scores[i] = new_scores[i];
+      send_display(scores[i]);
+    }
+  } 
+  
   if (digitalRead(button_pin) == LOW) {
     if (!audio_data) {
       audio_data = (uint8_t*)malloc(total_samples * sizeof(uint8_t));
@@ -177,7 +241,7 @@ void loop() {
     http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
 
     Serial.print("HTTP begin result: ");
-    Serial.println(http.begin(client, app_script_url));
+    Serial.println(http.begin(client, "https://script.google.com/macros/s/AKfycbxyc3BhuntmzLMy_e6rWVDDE5UldHRclhmQaiyHUIAYosD6TO5yyxVxvSNl1BFXVL0sJw/exec"));
 
     http.addHeader("Content-Type", "audio/wav");
 

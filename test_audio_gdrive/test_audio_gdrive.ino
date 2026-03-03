@@ -3,6 +3,8 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <WiFi.h>
+#include "app_script_credentials.h"
+#include "wifi_credentials.h"
 
 // Connections to INMP441 I2S microphone
 #define I2S_WS 19
@@ -45,9 +47,6 @@ void i2s_setpin() {
 
   i2s_set_pin(I2S_PORT, &pin_config);
 }
-
-const char* ssid_home = "Harry8";
-const char* password_home = "6504952957";
 
 bool attempt_connect(const char* ssid, const char* password) {
   WiFi.begin(ssid, password);
@@ -108,11 +107,11 @@ void setup() {
     HTTPClient http;
     http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
 
-// curl -L -X POST "https://script.google.com/macros/s/AKfycby2aXkEaCeCkBWqHjJgKLIBxXeM_WZ6LcqNobeYQ8ipsW8idqHCFnFJgssBAvd_DDu_VA/exec" \
+// curl -L -X POST "$APP_SCRIPT_URL" \
 // -H "Content-Type: application/json" \
 // -d '{"audio": "ADklsK...CNzgpKQ==", "filename": "test.wav", "mimeType": "audio/wav"}'
 
-    http.begin(client, "https://script.google.com/macros/s/AKfycby2aXkEaCeCkBWqHjJgKLIBxXeM_WZ6LcqNobeYQ8ipsW8idqHCFnFJgssBAvd_DDu_VA/exec");
+    http.begin(client, app_script_url);
     http.addHeader("Content-Type", "application/json");
     int http_response_code = http.POST(audio_data);
         if (http_response_code > 0) {

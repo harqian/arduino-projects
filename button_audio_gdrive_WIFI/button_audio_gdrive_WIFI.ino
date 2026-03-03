@@ -4,12 +4,14 @@
 #include <WiFiClientSecure.h>
 #include <WiFi.h>
 #include <base64.h>
+#include "app_script_credentials.h"
+#include "wifi_credentials.h"
 
 // Connections to INMP441 I2S microphone
 #define I2S_WS 19
 #define I2S_SD 23
-#define I2S_SCK 21
-// 22 is button
+#define I2S_SCK 16
+const int button_pin = 18;
 
 // Use I2S Processor 0
 #define I2S_PORT I2S_NUM_0
@@ -46,8 +48,6 @@ void i2s_setpin() {
 
   i2s_set_pin(I2S_PORT, &pin_config);
 }
-
-#include "wifi_credentials.h"
 
 bool attempt_connect(const char* ssid, const char* password) {
   WiFi.begin(ssid, password);
@@ -141,11 +141,11 @@ void setup() {
   Serial.println(ESP.getMaxAllocHeap()); // This is the key one!
 
   
-  pinMode(22, INPUT_PULLUP);
+  pinMode(button_pin, INPUT_PULLUP);
 }
 
 void loop() {
-  if (digitalRead(22) == LOW) {
+  if (digitalRead(button_pin) == LOW) {
     if (!audio_data) {
       audio_data = (int16_t *)malloc(total_samples * sizeof(int16_t));
       if (!audio_data) {
@@ -155,7 +155,7 @@ void loop() {
     }
 
     int samples_written = 0;
-    while (digitalRead(22) == LOW && samples_written < total_samples) {
+    while (digitalRead(button_pin) == LOW && samples_written < total_samples) {
       size_t bytesRead = 0;
       esp_err_t res = i2s_read(I2S_PORT, sBuffer, bufferLen * sizeof(int16_t), &bytesRead, portMAX_DELAY);
       int samples_read = bytesRead / sizeof(int16_t);
@@ -170,7 +170,7 @@ void loop() {
     client.setInsecure();
     HTTPClient http;
     http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-    http.begin(client, "https://script.google.com/macros/s/AKfycbwbHz1PzlatN9bivAvQh_Oef0ZFGlkZJL4BozrumBX5FIbjoEn7v7STM_jgdd1swnx4Tw/exec");
+    http.begin(client, app_script_url);
     http.addHeader("Content-Type", "audio/wav");
 
     int data_size = samples_written * sizeof(int16_t);
