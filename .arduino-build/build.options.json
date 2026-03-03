@@ -1,0 +1,9 @@
+{
+  "additionalFiles": "../..,../..",
+  "compiler.optimization_flags": "-Os",
+  "customBuildProperties": "",
+  "fqbn": "esp32:esp32:esp32",
+  "hardwareFolders": "/Users/hq/Library/Arduino15/packages/esp32/hardware/esp32/3.3.7,/Users/hq/Library/Arduino15/packages/esp32/hardware/esp32/3.3.7",
+  "otherLibrariesFolders": "/Users/hq/Documents/Arduino/libraries",
+  "sketchLocation": "/Users/hq/github_projects/arduino-projects/databox"
+}

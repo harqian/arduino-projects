@@ -1,3 +1,5 @@
+#include <Arduino.h>
+#line 1 "/Users/hq/github_projects/arduino-projects/databox/databox.ino"
 // Include I2S driver
 #include <driver/i2s.h>
 #include <driver/adc.h>
@@ -596,3 +598,4 @@ void loop() {
     send_to_sheet(scores[0], scores[1], hold_duration_ms, base64Audio);
   }
 }
+
