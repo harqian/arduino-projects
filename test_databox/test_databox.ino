@@ -23,25 +23,25 @@ void setup() {
 }
 
 void loop() {
-  // Serial.println("check leds in 10s:");
-  // delay(10000);
+  Serial.println("check leds in 10s:");
+  delay(10000);
 
-  // for (int i = 0; i < 6; i++){
-  //   Serial.print("writing led ");
-  //   Serial.print(led_pins[i]);
-  //   Serial.println(" to HIGH.");
-  //   delay(5000);
-  //   digitalWrite(led_pins[i], HIGH);
-  // }
+  for (int i = 0; i < 6; i++){
+    Serial.print("writing led ");
+    Serial.print(led_pins[i]);
+    Serial.println(" to HIGH.");
+    delay(5000);
+    digitalWrite(led_pins[i], HIGH);
+  }
 
-  // for (int i = 0; i < sizeof(led_pins) / sizeof(led_pins[0]); i++){
-  //   Serial.print("writing led ");
-  //   Serial.print(led_pins[i]);
-  //   Serial.println(" to LOW.");
-  //   delay(5000);
-  //   digitalWrite(led_pins[i], LOW);
-  // }
-  // Serial.println("done checking leds");
+  for (int i = 0; i < sizeof(led_pins) / sizeof(led_pins[0]); i++){
+    Serial.print("writing led ");
+    Serial.print(led_pins[i]);
+    Serial.println(" to LOW.");
+    delay(5000);
+    digitalWrite(led_pins[i], LOW);
+  }
+  Serial.println("done checking leds");
 
   Serial.println("checking pots in 10s");
   delay(10000);

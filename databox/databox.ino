@@ -97,11 +97,16 @@ bool attempt_connect(const char* ssid, const char* password) {
 
 
 const int total_samples = 16000 * 4;
+const int max_score = 15;
+const int pot_sample_count = 16;
+const int stable_score_reads = 4;
 uint8_t* audio_data = NULL;
 int num_cycles = 0;
 int new_scores[2] = {-1, -1};
 int scores[2] = {-1, -1};
 int pot_values[2];
+int pending_scores[2] = {-1, -1};
+int pending_score_counts[2] = {0, 0};
 
 const adc1_channel_t pot_channels[2] = {
   ADC1_CHANNEL_6, // GPIO34
@@ -225,28 +230,59 @@ int read_pot_raw(int index) {
   return adc1_get_raw(pot_channels[index]);
 }
 
+int read_pot_average(int index) {
+  long total = 0;
+
+  for (int sample = 0; sample < pot_sample_count; sample++) {
+    total += read_pot_raw(index);
+  }
+
+  return total / pot_sample_count;
+}
+
+int raw_to_score(int raw_value) {
+  int score = (raw_value * (max_score + 1)) / 4096;
+  if (score > max_score) {
+    score = max_score;
+  }
+  return score;
+}
+
 void update_scores() {
   int last_changed_index = -1;
 
   for (int i = 0; i < 2; i++) {
-    pot_values[i] = read_pot_raw(i);
-    new_scores[i] = pot_values[i] * 16 / 4095;
+    pot_values[i] = read_pot_average(i);
+    new_scores[i] = raw_to_score(pot_values[i]);
 
     if (new_scores[i] != scores[i]) {
-      Serial.print("Score changed: ");
-      Serial.print(scores[i]);
-      Serial.print(" -> ");
-      Serial.println(new_scores[i]);
-
-      scores[i] = new_scores[i];
-      last_changed_index = i;
-
-      if (last_changed_index != -1) {
-        Serial.print("Displaying most recent score from pot ");
-        Serial.println(last_changed_index);
-        send_display(scores[last_changed_index]);
+      if (pending_scores[i] != new_scores[i]) {
+        pending_scores[i] = new_scores[i];
+        pending_score_counts[i] = 1;
+      } else {
+        pending_score_counts[i]++;
       }
+
+      if (pending_score_counts[i] >= stable_score_reads) {
+        Serial.print("Score changed: ");
+        Serial.print(scores[i]);
+        Serial.print(" -> ");
+        Serial.println(new_scores[i]);
+
+        scores[i] = new_scores[i];
+        pending_score_counts[i] = 0;
+        last_changed_index = i;
+      }
+    } else {
+      pending_scores[i] = -1;
+      pending_score_counts[i] = 0;
     }
+  }
+
+  if (last_changed_index != -1) {
+    Serial.print("Displaying most recent score from pot ");
+    Serial.println(last_changed_index);
+    send_display(scores[last_changed_index]);
   }
 
 }
