@@ -1,5 +1,6 @@
 // Include I2S driver
 #include <driver/i2s.h>
+#include <driver/adc.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <WiFi.h>
@@ -101,6 +102,11 @@ int num_cycles = 0;
 int new_scores[2] = {-1, -1};
 int scores[2] = {-1, -1};
 int pot_values[2];
+
+const adc1_channel_t pot_channels[2] = {
+  ADC1_CHANNEL_6, // GPIO34
+  ADC1_CHANNEL_7  // GPIO35
+};
 
 void send_to_sheet(int score_one, int score_two, unsigned long hold_duration_ms, const String& base64_audio) {
   if (WiFi.status() != WL_CONNECTED) {
@@ -209,9 +215,19 @@ void send_display(int number) {
   }
 }
 
+void init_pots() {
+  adc1_config_width(ADC_WIDTH_BIT_12);
+  adc1_config_channel_atten(pot_channels[0], ADC_ATTEN_DB_11);
+  adc1_config_channel_atten(pot_channels[1], ADC_ATTEN_DB_11);
+}
+
+int read_pot_raw(int index) {
+  return adc1_get_raw(pot_channels[index]);
+}
+
 void update_scores() {
   for (int i = 0; i < 2; i++) {
-    pot_values[i] = analogRead(pot_pins[i]);
+    pot_values[i] = read_pot_raw(i);
     new_scores[i] = pot_values[i] * 16 / 4095;
 
     Serial.print("Pot raw: ");
@@ -256,6 +272,7 @@ void setup() {
 
 
   pinMode(button_pin, INPUT_PULLUP);
+  init_pots();
 
   for (int led_pin : led_pins) {
     pinMode(led_pin, OUTPUT);
