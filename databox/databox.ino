@@ -226,14 +226,11 @@ int read_pot_raw(int index) {
 }
 
 void update_scores() {
+  int last_changed_index = -1;
+
   for (int i = 0; i < 2; i++) {
     pot_values[i] = read_pot_raw(i);
     new_scores[i] = pot_values[i] * 16 / 4095;
-
-    Serial.print("Pot raw: ");
-    Serial.print(pot_values[i]);
-    Serial.print(" -> score: ");
-    Serial.println(new_scores[i]);
 
     if (new_scores[i] != scores[i]) {
       Serial.print("Score changed: ");
@@ -242,9 +239,16 @@ void update_scores() {
       Serial.println(new_scores[i]);
 
       scores[i] = new_scores[i];
-      send_display(scores[i]);
+      last_changed_index = i;
+
+      if (last_changed_index != -1) {
+        Serial.print("Displaying most recent score from pot ");
+        Serial.println(last_changed_index);
+        send_display(scores[last_changed_index]);
+      }
     }
   }
+
 }
 
 
