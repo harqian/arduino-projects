@@ -14,6 +14,7 @@
 #define I2S_SD 23
 #define I2S_SCK 16
 const int button_pin = 18;
+const int diagnostic_enable_pin = 4;
 const int led_pins[6] = {32, 33, 25, 26, 27, 14};
 const int display_pins[4] = {32, 33, 25, 26};
 const int warning_led_pin = 27;
@@ -108,6 +109,7 @@ const uint32_t low_memory_threshold = 32768;
 const unsigned long status_blink_on_ms = 200;
 const unsigned long status_blink_off_ms = 200;
 const unsigned long status_blink_pause_ms = 1200;
+const unsigned long diagnostic_step_ms = 3000;
 uint8_t* audio_data = NULL;
 int num_cycles = 0;
 int new_scores[2] = {-1, -1};
@@ -121,69 +123,70 @@ const adc1_channel_t pot_channels[2] = {
   ADC1_CHANNEL_7  // GPIO35
 };
 
-enum WarningCode {
-  WARNING_NONE = 0,
-  WARNING_WIFI_BOOT = 1,
-  WARNING_UPLOAD_SKIPPED = 2,
-  WARNING_RECORDING_TRUNCATED = 3,
-  WARNING_RECORDING_SHORT = 4,
-  WARNING_LOW_MEMORY = 5
-};
+const int WARNING_NONE = 0;
+const int WARNING_WIFI_BOOT = 1;
+const int WARNING_UPLOAD_SKIPPED = 2;
+const int WARNING_RECORDING_TRUNCATED = 3;
+const int WARNING_RECORDING_SHORT = 4;
+const int WARNING_LOW_MEMORY = 5;
 
-enum ErrorCode {
-  ERROR_NONE = 0,
-  ERROR_AUDIO_ALLOC = 1,
-  ERROR_I2S_READ = 2,
-  ERROR_WAV_ALLOC = 3,
-  ERROR_HTTP_BEGIN = 4,
-  ERROR_HTTP_POST = 5,
-  ERROR_I2S_INIT = 6
-};
+const int ERROR_NONE = 0;
+const int ERROR_AUDIO_ALLOC = 1;
+const int ERROR_I2S_READ = 2;
+const int ERROR_WAV_ALLOC = 3;
+const int ERROR_HTTP_BEGIN = 4;
+const int ERROR_HTTP_POST = 5;
+const int ERROR_I2S_INIT = 6;
 
 uint16_t warning_flags = 0;
 uint16_t error_flags = 0;
+bool diagnostic_demo_active = false;
+bool diagnostic_demo_showing_error = false;
+int diagnostic_demo_code = WARNING_WIFI_BOOT;
+unsigned long diagnostic_demo_step_started_ms = 0;
+int last_diagnostic_enable_state = HIGH;
 
 uint16_t code_to_mask(int code) {
   return 1U << code;
 }
 
-WarningCode highest_active_warning() {
+int highest_active_warning() {
   for (int code = WARNING_WIFI_BOOT; code <= WARNING_LOW_MEMORY; code++) {
     if (warning_flags & code_to_mask(code)) {
-      return static_cast<WarningCode>(code);
+      return code;
     }
   }
   return WARNING_NONE;
 }
 
-ErrorCode highest_active_error() {
+int highest_active_error() {
   for (int code = ERROR_AUDIO_ALLOC; code <= ERROR_I2S_INIT; code++) {
     if (error_flags & code_to_mask(code)) {
-      return static_cast<ErrorCode>(code);
+      return code;
     }
   }
   return ERROR_NONE;
 }
 
-void set_warning(WarningCode code) {
+void set_warning(int code) {
   if (code != WARNING_NONE) {
     warning_flags |= code_to_mask(code);
   }
 }
 
-void clear_warning(WarningCode code) {
+void clear_warning(int code) {
   if (code != WARNING_NONE) {
     warning_flags &= ~code_to_mask(code);
   }
 }
 
-void set_error(ErrorCode code) {
+void set_error(int code) {
   if (code != ERROR_NONE) {
     error_flags |= code_to_mask(code);
   }
 }
 
-void clear_error(ErrorCode code) {
+void clear_error(int code) {
   if (code != ERROR_NONE) {
     error_flags &= ~code_to_mask(code);
   }
@@ -194,6 +197,41 @@ void update_memory_warning() {
     set_warning(WARNING_LOW_MEMORY);
   } else {
     clear_warning(WARNING_LOW_MEMORY);
+  }
+}
+
+void start_diagnostic_demo() {
+  diagnostic_demo_active = true;
+  diagnostic_demo_showing_error = false;
+  diagnostic_demo_code = WARNING_WIFI_BOOT;
+  diagnostic_demo_step_started_ms = millis();
+}
+
+void update_diagnostic_demo() {
+  if (!diagnostic_demo_active) {
+    return;
+  }
+
+  unsigned long now = millis();
+  if (now - diagnostic_demo_step_started_ms < diagnostic_step_ms) {
+    return;
+  }
+
+  diagnostic_demo_step_started_ms = now;
+
+  if (!diagnostic_demo_showing_error) {
+    diagnostic_demo_code++;
+    if (diagnostic_demo_code > WARNING_LOW_MEMORY) {
+      diagnostic_demo_showing_error = true;
+      diagnostic_demo_code = ERROR_AUDIO_ALLOC;
+    }
+  } else {
+    diagnostic_demo_code++;
+    if (diagnostic_demo_code > ERROR_I2S_INIT) {
+      diagnostic_demo_active = false;
+      diagnostic_demo_showing_error = false;
+      diagnostic_demo_code = WARNING_WIFI_BOOT;
+    }
   }
 }
 
@@ -208,15 +246,20 @@ void update_status_leds() {
   int target_pin = -1;
   int target_code = 0;
 
-  ErrorCode active_error = highest_active_error();
-  WarningCode active_warning = highest_active_warning();
+  if (diagnostic_demo_active) {
+    target_pin = diagnostic_demo_showing_error ? error_led_pin : warning_led_pin;
+    target_code = diagnostic_demo_code;
+  } else {
+    int active_error = highest_active_error();
+    int active_warning = highest_active_warning();
 
-  if (active_error != ERROR_NONE) {
-    target_pin = error_led_pin;
-    target_code = active_error;
-  } else if (active_warning != WARNING_NONE) {
-    target_pin = warning_led_pin;
-    target_code = active_warning;
+    if (active_error != ERROR_NONE) {
+      target_pin = error_led_pin;
+      target_code = active_error;
+    } else if (active_warning != WARNING_NONE) {
+      target_pin = warning_led_pin;
+      target_code = active_warning;
+    }
   }
 
   if (target_pin != active_pin || target_code != active_code) {
@@ -484,6 +527,7 @@ void setup() {
 
 
   pinMode(button_pin, INPUT_PULLUP);
+  pinMode(diagnostic_enable_pin, INPUT_PULLUP);
   init_pots();
 
   for (int led_pin : led_pins) {
@@ -495,9 +539,20 @@ void setup() {
 
 }
 void loop() {
+  int diagnostic_enable_state = digitalRead(diagnostic_enable_pin);
+  if (last_diagnostic_enable_state == HIGH && diagnostic_enable_state == LOW) {
+    start_diagnostic_demo();
+  }
+  last_diagnostic_enable_state = diagnostic_enable_state;
+
+  update_diagnostic_demo();
   update_status_leds();
   update_scores();
   update_memory_warning();
+
+  if (diagnostic_demo_active) {
+    return;
+  }
 
   if (digitalRead(button_pin) == LOW) {
     if (!audio_data) {
@@ -515,6 +570,7 @@ void loop() {
     bool hit_recording_cap = false;
 
     while (digitalRead(button_pin) == LOW && samples_written < total_samples) {
+      update_diagnostic_demo();
       update_status_leds();
       size_t bytesRead = 0;
       esp_err_t res = i2s_read(I2S_PORT, sBuffer, bufferLen * sizeof(int16_t), &bytesRead, portMAX_DELAY);
@@ -540,6 +596,7 @@ void loop() {
     }
 
     while (digitalRead(button_pin) == LOW) {
+      update_diagnostic_demo();
       update_status_leds();
       delay(1);
     }

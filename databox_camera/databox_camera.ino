@@ -26,6 +26,9 @@ const unsigned long status_blink_pause_ms = 1200;
 const unsigned long wifi_connect_timeout_ms = 10000;
 const unsigned long wifi_retry_interval_ms = 10000;
 const uint32_t low_memory_threshold = 32768;
+const unsigned long diagnostic_tap_window_ms = 1200;
+const unsigned long diagnostic_tap_max_press_ms = 250;
+const unsigned long diagnostic_step_ms = 3000;
 
 enum BootState
 {
@@ -35,29 +38,30 @@ enum BootState
   BOOT_READY
 };
 
-enum WarningCode
-{
-  WARNING_NONE = 0,
-  WARNING_WIFI_BOOT = 1,
-  WARNING_UPLOAD_SKIPPED = 2,
-  WARNING_NO_PSRAM = 3,
-  WARNING_LOW_MEMORY = 4
-};
+const int WARNING_NONE = 0;
+const int WARNING_WIFI_BOOT = 1;
+const int WARNING_UPLOAD_SKIPPED = 2;
+const int WARNING_NO_PSRAM = 3;
+const int WARNING_LOW_MEMORY = 4;
 
-enum ErrorCode
-{
-  ERROR_NONE = 0,
-  ERROR_CAMERA_INIT = 1,
-  ERROR_FRAME_CAPTURE = 2,
-  ERROR_HTTP_BEGIN = 3,
-  ERROR_HTTP_POST = 4
-};
+const int ERROR_NONE = 0;
+const int ERROR_CAMERA_INIT = 1;
+const int ERROR_FRAME_CAPTURE = 2;
+const int ERROR_HTTP_BEGIN = 3;
+const int ERROR_HTTP_POST = 4;
 
 BootState boot_state = BOOT_STARTUP;
 uint16_t warning_flags = 0;
 uint16_t error_flags = 0;
 bool status_blinking_enabled = false;
 unsigned long last_wifi_retry_ms = 0;
+bool diagnostic_demo_active = false;
+bool diagnostic_demo_showing_error = false;
+int diagnostic_demo_code = WARNING_WIFI_BOOT;
+unsigned long diagnostic_demo_step_started_ms = 0;
+int button_tap_count = 0;
+unsigned long last_button_tap_ms = 0;
+bool pending_capture = false;
 
 void setStatusLEDs(bool led1, bool led2)
 {
@@ -70,31 +74,31 @@ uint16_t code_to_mask(int code)
   return 1U << code;
 }
 
-WarningCode highest_active_warning()
+int highest_active_warning()
 {
   for (int code = WARNING_WIFI_BOOT; code <= WARNING_LOW_MEMORY; code++)
   {
     if (warning_flags & code_to_mask(code))
     {
-      return static_cast<WarningCode>(code);
+      return code;
     }
   }
   return WARNING_NONE;
 }
 
-ErrorCode highest_active_error()
+int highest_active_error()
 {
   for (int code = ERROR_CAMERA_INIT; code <= ERROR_HTTP_POST; code++)
   {
     if (error_flags & code_to_mask(code))
     {
-      return static_cast<ErrorCode>(code);
+      return code;
     }
   }
   return ERROR_NONE;
 }
 
-void set_warning(WarningCode code)
+void set_warning(int code)
 {
   if (code != WARNING_NONE)
   {
@@ -102,7 +106,7 @@ void set_warning(WarningCode code)
   }
 }
 
-void clear_warning(WarningCode code)
+void clear_warning(int code)
 {
   if (code != WARNING_NONE)
   {
@@ -110,7 +114,7 @@ void clear_warning(WarningCode code)
   }
 }
 
-void set_error(ErrorCode code)
+void set_error(int code)
 {
   if (code != ERROR_NONE)
   {
@@ -118,7 +122,7 @@ void set_error(ErrorCode code)
   }
 }
 
-void clear_error(ErrorCode code)
+void clear_error(int code)
 {
   if (code != ERROR_NONE)
   {
@@ -135,6 +139,72 @@ void update_memory_warning()
   else
   {
     clear_warning(WARNING_LOW_MEMORY);
+  }
+}
+
+void start_diagnostic_demo()
+{
+  diagnostic_demo_active = true;
+  diagnostic_demo_showing_error = false;
+  diagnostic_demo_code = WARNING_WIFI_BOOT;
+  diagnostic_demo_step_started_ms = millis();
+  button_tap_count = 0;
+  last_button_tap_ms = 0;
+  pending_capture = false;
+}
+
+void update_diagnostic_demo()
+{
+  if (!diagnostic_demo_active)
+  {
+    return;
+  }
+
+  unsigned long now = millis();
+  if (now - diagnostic_demo_step_started_ms < diagnostic_step_ms)
+  {
+    return;
+  }
+
+  diagnostic_demo_step_started_ms = now;
+
+  if (!diagnostic_demo_showing_error)
+  {
+    diagnostic_demo_code++;
+    if (diagnostic_demo_code > WARNING_LOW_MEMORY)
+    {
+      diagnostic_demo_showing_error = true;
+      diagnostic_demo_code = ERROR_CAMERA_INIT;
+    }
+  }
+  else
+  {
+    diagnostic_demo_code++;
+    if (diagnostic_demo_code > ERROR_HTTP_POST)
+    {
+      diagnostic_demo_active = false;
+      diagnostic_demo_showing_error = false;
+      diagnostic_demo_code = WARNING_WIFI_BOOT;
+    }
+  }
+}
+
+void register_button_tap()
+{
+  unsigned long now = millis();
+
+  if (now - last_button_tap_ms > diagnostic_tap_window_ms)
+  {
+    button_tap_count = 0;
+  }
+
+  button_tap_count++;
+  last_button_tap_ms = now;
+  pending_capture = true;
+
+  if (button_tap_count >= 3)
+  {
+    start_diagnostic_demo();
   }
 }
 
@@ -204,18 +274,26 @@ void update_status_leds()
   int target_pin = -1;
   int target_code = 0;
 
-  ErrorCode active_error = highest_active_error();
-  WarningCode active_warning = highest_active_warning();
-
-  if (active_error != ERROR_NONE)
+  if (diagnostic_demo_active)
   {
-    target_pin = LED2_PIN;
-    target_code = active_error;
+    target_pin = diagnostic_demo_showing_error ? LED2_PIN : LED1_PIN;
+    target_code = diagnostic_demo_code;
   }
-  else if (active_warning != WARNING_NONE)
+  else
   {
-    target_pin = LED1_PIN;
-    target_code = active_warning;
+    int active_error = highest_active_error();
+    int active_warning = highest_active_warning();
+
+    if (active_error != ERROR_NONE)
+    {
+      target_pin = LED2_PIN;
+      target_code = active_error;
+    }
+    else if (active_warning != WARNING_NONE)
+    {
+      target_pin = LED1_PIN;
+      target_code = active_warning;
+    }
   }
 
   if (target_pin != active_pin || target_code != active_code)
@@ -486,13 +564,58 @@ void setup()
 
 void loop()
 {
+  update_diagnostic_demo();
   update_status_leds();
   update_memory_warning();
   maybe_retry_wifi();
+
+  if (diagnostic_demo_active)
+  {
+    delay(50);
+    return;
+  }
+
+  if (pending_capture &&
+      button_tap_count > 0 &&
+      millis() - last_button_tap_ms > diagnostic_tap_window_ms)
+  {
+    pending_capture = false;
+    button_tap_count = 0;
+    last_button_tap_ms = 0;
+    send_capture();
+  }
+
   delay(50);
   if (digitalRead(BUTTON_PIN) == LOW)
   {
-    send_capture();
-    delay(1000);
+    unsigned long press_started_ms = millis();
+
+    while (digitalRead(BUTTON_PIN) == LOW &&
+           millis() - press_started_ms < diagnostic_tap_max_press_ms)
+    {
+      update_diagnostic_demo();
+      update_status_leds();
+    }
+
+    while (digitalRead(BUTTON_PIN) == LOW)
+    {
+      update_diagnostic_demo();
+      update_status_leds();
+      delay(1);
+    }
+
+    if (millis() - press_started_ms < diagnostic_tap_max_press_ms)
+    {
+      register_button_tap();
+    }
+    else
+    {
+      pending_capture = false;
+      button_tap_count = 0;
+      last_button_tap_ms = 0;
+      send_capture();
+    }
+
+    delay(250);
   }
 }
